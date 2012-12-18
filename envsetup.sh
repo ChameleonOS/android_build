@@ -13,9 +13,9 @@ Invoke ". build/envsetup.sh" from your shell to add the following functions to y
 - jgrep:   Greps on all local Java files.
 - resgrep: Greps on all local res/*.xml files.
 - godir:   Go to the directory containing a file.
-- cmremote: Add git remote for CM Gerrit Review.
-- cmgerrit: A Git wrapper that fetches/pushes patch from/to CM Gerrit Review.
-- cmrebase: Rebase a Gerrit change and push it again.
+- cosremote: Add git remote for COS Gerrit Review.
+- cosgerrit: A Git wrapper that fetches/pushes patch from/to COS Gerrit Review.
+- cosrebase: Rebase a Gerrit change and push it again.
 - aospremote: Add git remote for matching AOSP repository.
 - mka:      Builds using SCHED_BATCH on all processors.
 - mkap:     Builds the module(s) using mka and pushes them to the device.
@@ -68,12 +68,12 @@ function check_product()
         return
     fi
 
-    if (echo -n $1 | grep -q -e "^cm_") ; then
-       CM_BUILD=$(echo -n $1 | sed -e 's/^cm_//g')
+    if (echo -n $1 | grep -q -e "^cos_") ; then
+       COS_BUILD=$(echo -n $1 | sed -e 's/^cos_//g')
     else
-       CM_BUILD=
+       COS_BUILD=
     fi
-    export CM_BUILD
+    export COS_BUILD
 
     CALLED_FROM_SETUP=true BUILD_SYSTEM=build/core \
         TARGET_PRODUCT=$1 \
@@ -454,7 +454,7 @@ function print_lunch_menu()
        echo "  (ohai, koush!)"
     fi
     echo
-    if [ "z${CM_DEVICES_ONLY}" != "z" ]; then
+    if [ "z${COS_DEVICES_ONLY}" != "z" ]; then
        echo "Breakfast menu... pick a combo:"
     else
        echo "Lunch menu... pick a combo:"
@@ -468,7 +468,7 @@ function print_lunch_menu()
         i=$(($i+1))
     done
 
-    if [ "z${CM_DEVICES_ONLY}" != "z" ]; then
+    if [ "z${COS_DEVICES_ONLY}" != "z" ]; then
        echo "... and don't forget the bacon!"
     fi
 
@@ -490,10 +490,10 @@ function brunch()
 function breakfast()
 {
     target=$1
-    CM_DEVICES_ONLY="true"
+    COS_DEVICES_ONLY="true"
     unset LUNCH_MENU_CHOICES
     add_lunch_combo full-eng
-    for f in `/bin/ls vendor/cm/vendorsetup.sh 2> /dev/null`
+    for f in `/bin/ls vendor/cos/vendorsetup.sh 2> /dev/null`
         do
             echo "including $f"
             . $f
@@ -509,8 +509,8 @@ function breakfast()
             # A buildtype was specified, assume a full device name
             lunch $target
         else
-            # This is probably just the CM model name
-            lunch cm_$target-userdebug
+            # This is probably just the COS model name
+            lunch cos_$target-userdebug
         fi
     fi
     return $?
@@ -559,7 +559,7 @@ function lunch()
     check_product $product
     if [ $? -ne 0 ]
     then
-        # if we can't find a product, try to grab it off the CM github
+        # if we can't find a product, try to grab it off the COS github
         T=$(gettop)
         pushd $T > /dev/null
         build/tools/roomservice.py $product
@@ -656,8 +656,8 @@ function tapas()
 function eat()
 {
     if [ "$OUT" ] ; then
-        MODVERSION=`sed -n -e'/ro\.cm\.version/s/.*=//p' $OUT/system/build.prop`
-        ZIPFILE=cm-$MODVERSION.zip
+        MODVERSION=`sed -n -e'/ro\.cos\.version/s/.*=//p' $OUT/system/build.prop`
+        ZIPFILE=cos-$MODVERSION.zip
         ZIPPATH=$OUT/$ZIPFILE
         if [ ! -f $ZIPPATH ] ; then
             echo "Nothing to eat"
@@ -1260,9 +1260,9 @@ function godir () {
     cd $T/$pathname
 }
 
-function cmremote()
+function cosremote()
 {
-    git remote rm cmremote 2> /dev/null
+    git remote rm cosremote 2> /dev/null
     if [ ! -d .git ]
     then
         echo .git directory not found. Please run this from the root directory of the Android repository you wish to set up.
@@ -1277,16 +1277,16 @@ function cmremote()
           return 0
         fi
     fi
-    CMUSER=`git config --get review.review.cyanogenmod.org.username`
-    if [ -z "$CMUSER" ]
+    COSUSER=`git config --get review.review.chameleonos.org.username`
+    if [ -z "$COSUSER" ]
     then
-        git remote add cmremote ssh://review.cyanogenmod.org:29418/$GERRIT_REMOTE
+        git remote add cosremote ssh://review.chameleonos.org:29418/$GERRIT_REMOTE
     else
-        git remote add cmremote ssh://$CMUSER@review.cyanogenmod.org:29418/$GERRIT_REMOTE
+        git remote add cosremote ssh://$COSUSER@review.chameleonos.org:29418/$GERRIT_REMOTE
     fi
-    echo You can now push to "cmremote".
+    echo You can now push to "cosremote".
 }
-export -f cmremote
+export -f cosremote
 
 function aospremote()
 {
@@ -1330,7 +1330,7 @@ function installboot()
     adb wait-for-device
     adb remount
     adb wait-for-device
-    if (adb shell cat /system/build.prop | grep -q "ro.cm.device=$CM_BUILD");
+    if (adb shell cat /system/build.prop | grep -q "ro.cos.device=$COS_BUILD");
     then
         adb push $OUT/boot.img /cache/
         for i in $OUT/system/lib/modules/*;
@@ -1346,7 +1346,7 @@ function installboot()
         adb shell chmod 644 /system/lib/modules/*
         echo "Installation complete."
     else
-        echo "The connected device does not appear to be $CM_BUILD, run away!"
+        echo "The connected device does not appear to be $COS_BUILD, run away!"
     fi
 }
 
@@ -1374,13 +1374,13 @@ function installrecovery()
     adb wait-for-device
     adb remount
     adb wait-for-device
-    if (adb shell cat /system/build.prop | grep -q "ro.cm.device=$CM_BUILD");
+    if (adb shell cat /system/build.prop | grep -q "ro.cos.device=$COS_BUILD");
     then
         adb push $OUT/recovery.img /cache/
         adb shell dd if=/cache/recovery.img of=$PARTITION
         echo "Installation complete."
     else
-        echo "The connected device does not appear to be $CM_BUILD, run away!"
+        echo "The connected device does not appear to be $COS_BUILD, run away!"
     fi
 }
 
@@ -1403,8 +1403,8 @@ function makerecipe() {
   if [ "$REPO_REMOTE" == "github" ]
   then
     pwd
-    cmremote
-    git push cmremote HEAD:refs/heads/'$1'
+    cosremote
+    git push cosremote HEAD:refs/heads/'$1'
   fi
   '
 
@@ -1413,7 +1413,7 @@ function makerecipe() {
   cd ..
 }
 
-function cmgerrit() {
+function cosgerrit() {
     if [ $# -eq 0 ]; then
         $FUNCNAME help
         return 1
@@ -1454,7 +1454,7 @@ EOF
             case $1 in
                 __cmg_*) echo "For internal use only." ;;
                 changes|for)
-                    if [ "$FUNCNAME" = "cmgerrit" ]; then
+                    if [ "$FUNCNAME" = "cosgerrit" ]; then
                         echo "'$FUNCNAME $1' is deprecated."
                     fi
                     ;;
@@ -1547,7 +1547,7 @@ EOF
                 $local_branch:refs/for/$remote_branch || return 1
             ;;
         changes|for)
-            if [ "$FUNCNAME" = "cmgerrit" ]; then
+            if [ "$FUNCNAME" = "cosgerrit" ]; then
                 echo >&2 "'$FUNCNAME $command' is deprecated."
             fi
             ;;
@@ -1646,7 +1646,7 @@ EOF
     esac
 }
 
-function cmrebase() {
+function cosrebase() {
     local repo=$1
     local refs=$2
     local pwd="$(pwd)"
@@ -1654,7 +1654,7 @@ function cmrebase() {
 
     if [ -z $repo ] || [ -z $refs ]; then
         echo "CyanogenMod Gerrit Rebase Usage: "
-        echo "      cmrebase <path to project> <patch IDs on Gerrit>"
+        echo "      cosrebase <path to project> <patch IDs on Gerrit>"
         echo "      The patch IDs appear on the Gerrit commands that are offered."
         echo "      They consist on a series of numbers and slashes, after the text"
         echo "      refs/changes. For example, the ID in the following command is 26/8126/2"
