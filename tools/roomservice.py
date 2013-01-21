@@ -34,7 +34,7 @@ except:
     device = product
 
 if not depsonly:
-    print "Device %s not found. Attempting to retrieve device repository from CyanogenMod Github (http://github.com/CyanogenMod)." % device
+    print "Device %s not found. Attempting to retrieve device repository from ChameleonOS Github (http://github.com/ChameleonOS)." % device
 
 repositories = []
 
@@ -54,7 +54,7 @@ def add_auth(githubreq):
 
 page = 1
 while not depsonly:
-    githubreq = urllib2.Request("https://api.github.com/users/CyanogenMod/repos?per_page=100&page=%d" % page)
+    githubreq = urllib2.Request("https://api.github.com/users/ChameleonOS/repos?per_page=100&page=%d" % page)
     add_auth(githubreq)
     result = json.loads(urllib2.urlopen(githubreq).read())
     if len(result) == 0:
@@ -138,13 +138,14 @@ def add_to_manifest(repositories):
     for repository in repositories:
         repo_name = repository['repository']
         repo_target = repository['target_path']
+        repo_project = repository['project']
         if exists_in_tree(lm, repo_name):
-            print 'CyanogenMod/%s already exists' % (repo_name)
+            print '%s/%s already exists' % (repo_project, repo_name)
             continue
 
-        print 'Adding dependency: CyanogenMod/%s -> %s' % (repo_name, repo_target)
+        print 'Adding dependency: %s/%s -> %s' % (repo_project, repo_name, repo_target)
         project = ElementTree.Element("project", attrib = { "path": repo_target,
-            "remote": "github", "name": "CyanogenMod/%s" % repo_name })
+            "remote": "github", "name": "%s/%s" % (repo_project, repo_name) })
 
         if 'branch' in repository:
             project.set('revision',repository['branch'])
@@ -161,7 +162,7 @@ def add_to_manifest(repositories):
 
 def fetch_dependencies(repo_path):
     print 'Looking for dependencies'
-    dependencies_path = repo_path + '/cm.dependencies'
+    dependencies_path = repo_path + '/cos.dependencies'
     syncable_repos = []
 
     if os.path.exists(dependencies_path):
@@ -170,7 +171,7 @@ def fetch_dependencies(repo_path):
         fetch_list = []
 
         for dependency in dependencies:
-            if not is_in_manifest("CyanogenMod/%s" % dependency['repository']):
+            if not is_in_manifest("ChameleonOS/%s" % dependency['repository']):
                 fetch_list.append(dependency)
                 syncable_repos.append(dependency['target_path'])
 
@@ -214,7 +215,7 @@ else:
             result = json.loads(urllib2.urlopen(githubreq).read())
             
             repo_path = "device/%s/%s" % (manufacturer, device)
-            adding = {'repository':repo_name,'target_path':repo_path}
+            adding = {'project':'ChameleonOS', 'repository':repo_name, 'target_path':repo_path}
             
             if not has_branch(result, default_revision):
                 found = False
@@ -245,4 +246,4 @@ else:
             print "Done"
             sys.exit()
 
-print "Repository for %s not found in the CyanogenMod Github repository list. If this is in error, you may need to manually add it to your local_manifest.xml." % device
+print "Repository for %s not found in the ChameleonOS Github repository list. If this is in error, you may need to manually add it to your local_manifest.xml." % device
