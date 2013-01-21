@@ -34,7 +34,7 @@ except:
     device = product
 
 if not depsonly:
-    print "Device %s not found. Attempting to retrieve device repository from CyanogenMod Github (http://github.com/CyanogenMod)." % device
+    print "Device %s not found. Attempting to retrieve device repository from ChameleonOS Github (http://github.com/ChameleonOS)." % device
 
 repositories = []
 
@@ -48,11 +48,14 @@ try:
 except:
     githubauth = None
 
-page = 1
-while not depsonly:
-    githubreq = urllib2.Request("https://api.github.com/users/CyanogenMod/repos?per_page=100&page=%d" % page)
+def add_auth(githubreq):
     if githubauth:
         githubreq.add_header("Authorization","Basic %s" % githubauth)
+
+page = 1
+while not depsonly:
+    githubreq = urllib2.Request("https://api.github.com/users/ChameleonOS/repos?per_page=100&page=%d" % page)
+    add_auth(githubreq)
     result = json.loads(urllib2.urlopen(githubreq).read())
     if len(result) == 0:
         break
@@ -81,6 +84,12 @@ def indent(elem, level=0):
     else:
         if level and (not elem.tail or not elem.tail.strip()):
             elem.tail = i
+
+def get_default_revision():
+    m = ElementTree.parse(".repo/manifests/default.xml")
+    d = m.findall('default')[0]
+    r = d.get('revision')
+    return r.split('/')[-1]
 
 def get_from_manifest(devicename):
     try:
@@ -129,13 +138,14 @@ def add_to_manifest(repositories):
     for repository in repositories:
         repo_name = repository['repository']
         repo_target = repository['target_path']
+        repo_project = repository['project']
         if exists_in_tree(lm, repo_name):
-            print 'CyanogenMod/%s already exists' % (repo_name)
+            print '%s/%s already exists' % (repo_project, repo_name)
             continue
 
-        print 'Adding dependency: CyanogenMod/%s -> %s' % (repo_name, repo_target)
+        print 'Adding dependency: %s/%s -> %s' % (repo_project, repo_name, repo_target)
         project = ElementTree.Element("project", attrib = { "path": repo_target,
-            "remote": "github", "name": "CyanogenMod/%s" % repo_name, "revision": "jellybean" })
+            "remote": "github", "name": "%s/%s" % (repo_project, repo_name) })
 
         if 'branch' in repository:
             project.set('revision',repository['branch'])
@@ -152,7 +162,7 @@ def add_to_manifest(repositories):
 
 def fetch_dependencies(repo_path):
     print 'Looking for dependencies'
-    dependencies_path = repo_path + '/cm.dependencies'
+    dependencies_path = repo_path + '/cos.dependencies'
     syncable_repos = []
 
     if os.path.exists(dependencies_path):
@@ -161,7 +171,7 @@ def fetch_dependencies(repo_path):
         fetch_list = []
 
         for dependency in dependencies:
-            if not is_in_manifest("CyanogenMod/%s" % dependency['repository']):
+            if not is_in_manifest("ChameleonOS/%s" % dependency['repository']):
                 fetch_list.append(dependency)
                 syncable_repos.append(dependency['target_path'])
 
@@ -177,6 +187,9 @@ def fetch_dependencies(repo_path):
         print 'Syncing dependencies'
         os.system('repo sync %s' % ' '.join(syncable_repos))
 
+def has_branch(branches, revision):
+    return revision in [branch['name'] for branch in branches]
+
 if depsonly:
     repo_path = get_from_manifest(device)
     if repo_path:
@@ -191,11 +204,39 @@ else:
         repo_name = repository['name']
         if repo_name.startswith("android_device_") and repo_name.endswith("_" + device):
             print "Found repository: %s" % repository['name']
+            
             manufacturer = repo_name.replace("android_device_", "").replace("_" + device, "")
-
+            
+            default_revision = get_default_revision()
+            print "Default revision: %s" % default_revision
+            print "Checking branch info"
+            githubreq = urllib2.Request(repository['branches_url'].replace('{/branch}', ''))
+            add_auth(githubreq)
+            result = json.loads(urllib2.urlopen(githubreq).read())
+            
             repo_path = "device/%s/%s" % (manufacturer, device)
+            adding = {'project':'ChameleonOS', 'repository':repo_name, 'target_path':repo_path}
+            
+            if not has_branch(result, default_revision):
+                found = False
+                if os.getenv('ROOMSERVICE_BRANCHES'):
+                    fallbacks = filter(bool, os.getenv('ROOMSERVICE_BRANCHES').split(' '))
+                    for fallback in fallbacks:
+                        if has_branch(result, fallback):
+                            print "Using fallback branch: %s" % fallback
+                            found = True
+                            adding['branch'] = fallback
+                            break
+                            
+                if not found:
+                    print "Default revision %s not found in %s. Bailing." % (default_revision, repo_name)
+                    print "Branches found:"
+                    for branch in [branch['name'] for branch in result]:
+                        print branch
+                    print "Use the ROOMSERVICE_BRANCHES environment variable to specify a list of fallback branches."
+                    sys.exit()
 
-            add_to_manifest([{'repository':repo_name,'target_path':repo_path}])
+            add_to_manifest([adding])
 
             print "Syncing repository to retrieve project."
             os.system('repo sync %s' % repo_path)
@@ -205,4 +246,4 @@ else:
             print "Done"
             sys.exit()
 
-print "Repository for %s not found in the CyanogenMod Github repository list. If this is in error, you may need to manually add it to your local_manifest.xml." % device
+print "Repository for %s not found in the ChameleonOS Github repository list. If this is in error, you may need to manually add it to your local_manifest.xml." % device
