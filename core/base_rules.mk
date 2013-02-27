@@ -127,7 +127,7 @@ endif
 module_id := MODULE.$(if \
     $(LOCAL_IS_HOST_MODULE),HOST,TARGET).$(LOCAL_MODULE_CLASS).$(LOCAL_MODULE)
 ifdef $(module_id)
-$(error $(LOCAL_PATH): $(module_id) already defined by $($(module_id)))
+$(warning $(LOCAL_PATH): $(module_id) already defined by $($(module_id)))
 endif
 $(module_id) := $(LOCAL_PATH)
 
