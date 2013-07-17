@@ -141,7 +141,10 @@ def add_to_manifest(repositories, fallback_branch = None):
     for repository in repositories:
         repo_name = repository['repository']
         repo_target = repository['target_path']
-        repo_project = repository['project']
+        if 'project' in repository:
+            repo_project = repository['project']
+        else:
+            repo_project = 'ChameleonOS'
         if exists_in_tree(lm, repo_name):
             print '%s/%s already exists' % (repo_project, repo_name)
             continue
