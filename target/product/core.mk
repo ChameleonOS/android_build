@@ -74,7 +74,9 @@ PRODUCT_PACKAGES += \
     mms-common \
     requestsync \
     telephony-common \
-    voip-common
+    voip-common \
+    SEAdmin \
+    auditd
 
 # host-only dependencies
 ifeq ($(WITH_HOST_DALVIK),true)
