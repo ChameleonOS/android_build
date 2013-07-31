@@ -378,11 +378,7 @@ class SignApk {
      * more efficient.
      */
     private static void copyFiles(Manifest manifest,
-<<<<<<< HEAD
-        JarFile in, JarOutputStream out, long timestamp) throws IOException {
-=======
                                   JarFile in, JarOutputStream out, long timestamp) throws IOException {
->>>>>>> android-4.3_r2.1
         byte[] buffer = new byte[4096];
         int num;
 
@@ -431,100 +427,6 @@ class SignApk {
             if (data.length < 2)
                 throw new IOException("Less than two bytes written to footer");
             write(data, 0, data.length - 2);
-<<<<<<< HEAD
-        }
-
-        public byte[] getTail() {
-            return footer.toByteArray();
-        }
-
-        @Override
-        public void write(byte[] b) throws IOException {
-            write(b, 0, b.length);
-        }
-
-        @Override
-        public void write(byte[] b, int off, int len) throws IOException {
-            if (closing) {
-                // if the jar is about to close, save the footer that will be written
-                footer.write(b, off, len);
-            }
-            else {
-                // write to both output streams. out is the CMSTypedData signer and tee is the file.
-                out.write(b, off, len);
-                tee.write(b, off, len);
-            }
-        }
-
-        @Override
-        public void write(int b) throws IOException {
-            if (closing) {
-                // if the jar is about to close, save the footer that will be written
-                footer.write(b);
-            }
-            else {
-                // write to both output streams. out is the CMSTypedData signer and tee is the file.
-                out.write(b);
-                tee.write(b);
-            }
-        }
-    }
-
-    private static class CMSSigner implements CMSTypedData {
-        private JarFile inputJar;
-        private File publicKeyFile;
-        private X509Certificate publicKey;
-        private PrivateKey privateKey;
-        private String outputFile;
-        private OutputStream outputStream;
-        private final ASN1ObjectIdentifier type;
-        private WholeFileSignerOutputStream signer;
-
-        public CMSSigner(JarFile inputJar, File publicKeyFile, X509Certificate publicKey, PrivateKey privateKey, OutputStream outputStream) {
-            this.inputJar = inputJar;
-            this.publicKeyFile = publicKeyFile;
-            this.publicKey = publicKey;
-            this.privateKey = privateKey;
-            this.outputStream = outputStream;
-            this.type = new ASN1ObjectIdentifier(CMSObjectIdentifiers.data.getId());
-        }
-
-        public Object getContent() {
-            throw new UnsupportedOperationException();
-        }
-
-        public ASN1ObjectIdentifier getContentType() {
-            return type;
-        }
-
-        public void write(OutputStream out) throws IOException {
-            try {
-                signer = new WholeFileSignerOutputStream(out, outputStream);
-                JarOutputStream outputJar = new JarOutputStream(signer);
-
-                Manifest manifest = addDigestsToManifest(inputJar);
-                signFile(manifest, inputJar, publicKeyFile, publicKey, privateKey, outputJar);
-                // Assume the certificate is valid for at least an hour.
-                long timestamp = publicKey.getNotBefore().getTime() + 3600L * 1000;
-                addOtacert(outputJar, publicKeyFile, timestamp, manifest);
-
-                signer.notifyClosing();
-                outputJar.close();
-                signer.finish();
-            }
-            catch (Exception e) {
-                throw new IOException(e);
-            }
-        }
-
-        public void writeSignatureBlock(ByteArrayOutputStream temp) throws IOException,
-               CertificateEncodingException,
-               OperatorCreationException,
-               CMSException {
-            SignApk.writeSignatureBlock(this, publicKey, privateKey, temp);
-        }
-
-=======
         }
 
         public byte[] getTail() {
@@ -623,22 +525,16 @@ class SignApk {
             SignApk.writeSignatureBlock(this, publicKey, privateKey, temp);
         }
 
->>>>>>> android-4.3_r2.1
         public WholeFileSignerOutputStream getSigner() {
             return signer;
         }
     }
 
-<<<<<<< HEAD
-    public static void signWholeFile(JarFile inputJar, File publicKeyFile, X509Certificate publicKey, PrivateKey privateKey, OutputStream outputStream) throws Exception {
-        CMSSigner cmsOut = new CMSSigner(inputJar, publicKeyFile, publicKey, privateKey, outputStream);
-=======
     private static void signWholeFile(JarFile inputJar, File publicKeyFile,
                                       X509Certificate publicKey, PrivateKey privateKey,
                                       OutputStream outputStream) throws Exception {
         CMSSigner cmsOut = new CMSSigner(inputJar, publicKeyFile,
                                          publicKey, privateKey, outputStream);
->>>>>>> android-4.3_r2.1
 
         ByteArrayOutputStream temp = new ByteArrayOutputStream();
 
