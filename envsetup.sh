@@ -4,6 +4,7 @@ Invoke ". build/envsetup.sh" from your shell to add the following functions to y
 - lunch:   lunch <product_name>-<build_variant>
 - tapas:   tapas [<App1> <App2> ...] [arm|x86|mips|armv5] [eng|userdebug|user]
 - croot:   Changes directory to the top of the tree.
+- cout:    Changes directory to out.
 - m:       Makes from the top of the tree.
 - mm:      Builds all of the modules in the current directory.
 - mma:     Builds all of the modules in the current directory, and their dependencies.
@@ -23,6 +24,7 @@ Invoke ". build/envsetup.sh" from your shell to add the following functions to y
 - mkap:     Builds the module(s) using mka and pushes them to the device.
 - cmka:     Cleans and builds using mka.
 - reposync: Parallel repo sync using ionice and SCHED_BATCH.
+- repopick: Utility to fetch changes from Gerrit.
 - installboot: Installs a boot.img to the connected device.
 - installrecovery: Installs a recovery.img to the connected device.
 
@@ -249,7 +251,7 @@ function settitle()
             PROMPT_COMMAND="echo -ne \"\033]0;${USER}@${HOSTNAME}: ${PWD}\007\";${PROMPT_COMMAND}"
         fi
         if [ ! -z "$ANDROID_PROMPT_PREFIX" ]; then
-            PROMPT_COMMAND=$(echo $PROMPT_COMMAND | sed -e 's/$ANDROID_PROMPT_PREFIX //g')
+            PROMPT_COMMAND="$(echo $PROMPT_COMMAND | sed -e 's/$ANDROID_PROMPT_PREFIX //g')"
         fi
 
         if [ -z "$apps" ]; then
@@ -260,7 +262,7 @@ function settitle()
         export ANDROID_PROMPT_PREFIX
 
         # Inject build data into hardstatus
-        export PROMPT_COMMAND=$(echo $PROMPT_COMMAND | sed -e 's/\\033]0;\(.*\)\\007/\\033]0;$ANDROID_PROMPT_PREFIX \1\\007/g')
+        export PROMPT_COMMAND="$(echo $PROMPT_COMMAND | sed -e 's/\\033]0;\(.*\)\\007/\\033]0;$ANDROID_PROMPT_PREFIX \1\\007/g')"
     fi
 }
 
@@ -487,9 +489,9 @@ function print_lunch_menu()
     local choice
     for choice in ${LUNCH_MENU_CHOICES[@]}
     do
-        echo "     $i. $choice"
+        echo " $i. $choice "
         i=$(($i+1))
-    done
+    done | column
 
     if [ "z${COS_DEVICES_ONLY}" != "z" ]; then
        echo "... and don't forget the bacon!"
@@ -621,6 +623,8 @@ function lunch()
 
     echo
 
+    fixup_common_out_dir
+
     set_stuff_for_environment
     printconfig
 }
@@ -680,7 +684,7 @@ function tapas()
 function eat()
 {
     if [ "$OUT" ] ; then
-        MODVERSION=`sed -n -e'/ro\.cos\.version/s/.*=//p' $OUT/system/build.prop`
+        MODVERSION=$(get_build_var COS_VERSION)
         ZIPFILE=cos-$MODVERSION.zip
         ZIPPATH=$OUT/$ZIPFILE
         if [ ! -f $ZIPPATH ] ; then
@@ -786,10 +790,17 @@ function findmakefile()
 
 function mm()
 {
+    local MM_MAKE=make
+    local ARG=
+    for ARG in $@ ; do
+        if [ "$ARG" = mka ]; then
+            MM_MAKE=mka
+        fi
+    done
     # If we're sitting in the root of the build tree, just do a
     # normal make.
     if [ -f build/core/envsetup.mk -a -f Makefile ]; then
-        make $@
+        $MM_MAKE $@
     else
         # Find the closest Android.mk file.
         T=$(gettop)
@@ -816,13 +827,14 @@ function mm()
               MODULES=all_modules
               ARGS=$@
             fi
-            ONE_SHOT_MAKEFILE=$M make -C $T -f build/core/main.mk $MODULES $ARGS
+            ONE_SHOT_MAKEFILE=$M $MM_MAKE -C $T -f build/core/main.mk $MODULES $ARGS
         fi
     fi
 }
 
 function mmm()
 {
+    local MMM_MAKE=make
     T=$(gettop)
     if [ "$T" ]; then
         local MAKEFILE=
@@ -861,7 +873,7 @@ function mmm()
           ARGS=$GET_INSTALL_PATH
           MODULES=
         fi
-        ONE_SHOT_MAKEFILE="$MAKEFILE" make -C $T -f build/core/main.mk $DASH_ARGS $MODULES $ARGS
+        ONE_SHOT_MAKEFILE="$MAKEFILE" $MMM_MAKE -C $T -f build/core/main.mk $DASH_ARGS $MODULES $ARGS
     else
         echo "Couldn't locate the top of the tree.  Try setting TOP."
     fi
@@ -923,6 +935,15 @@ function croot()
         \cd $(gettop)
     else
         echo "Couldn't locate the top of the tree.  Try setting TOP."
+    fi
+}
+
+function cout()
+{
+    if [  "$OUT" ]; then
+        cd $OUT
+    else
+        echo "Couldn't locate out directory.  Try setting OUT."
     fi
 }
 
@@ -1524,9 +1545,8 @@ function installboot()
     adb start-server
     adb root
     sleep 1
-    adb wait-for-device
-    adb remount
-    adb wait-for-device
+    adb wait-for-online shell mount /system 2>&1 > /dev/null
+    adb wait-for-online remount
     if (adb shell cat /system/build.prop | grep -q "ro.cos.device=$COS_BUILD");
     then
         adb push $OUT/boot.img /cache/
@@ -1574,9 +1594,8 @@ function installrecovery()
     adb start-server
     adb root
     sleep 1
-    adb wait-for-device
-    adb remount
-    adb wait-for-device
+    adb wait-for-online shell mount /system 2>&1 >> /dev/null
+    adb wait-for-online remount
     if (adb shell cat /system/build.prop | grep -q "ro.cos.device=$COS_BUILD");
     then
         adb push $OUT/recovery.img /cache/
@@ -1959,8 +1978,17 @@ function dopush()
 
     if (adb shell cat /system/build.prop | grep -q "ro.cm.device=$CM_BUILD");
     then
+    # retrieve IP and PORT info if we're using a TCP connection
+    TCPIPPORT=$(adb devices | egrep '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+[^0-9]+' \
+        | head -1 | awk '{print $1}')
     adb root &> /dev/null
     sleep 0.3
+    if [ -n "$TCPIPPORT" ]
+    then
+        # adb root just killed our connection
+        # so reconnect...
+        adb connect "$TCPIPPORT"
+    fi
     adb wait-for-device &> /dev/null
     sleep 0.3
     adb remount &> /dev/null
@@ -1977,8 +2005,9 @@ function dopush()
         # Get target file name (i.e. system/bin/adb)
         TARGET=$(echo $FILE | sed "s#$OUT/##")
 
-        # Don't send files that are not in /system.
-        if ! echo $TARGET | egrep '^system\/' > /dev/null ; then
+        # Don't send files that are not under /system or /data
+        if [ ! "echo $TARGET | egrep '^system\/' > /dev/null" -o \
+               "echo $TARGET | egrep '^data\/' > /dev/null" ] ; then
             continue
         else
             case $TARGET in
@@ -2006,6 +2035,29 @@ alias mmp='dopush mm'
 alias mmmp='dopush mmm'
 alias mkap='dopush mka'
 alias cmkap='dopush cmka'
+
+function repopick() {
+    T=$(gettop)
+    $T/build/tools/repopick.py $@
+}
+
+function fixup_common_out_dir() {
+    common_out_dir=$(get_build_var OUT_DIR)/target/common
+    target_device=$(get_build_var TARGET_DEVICE)
+    if [ ! -z $COS_FIXUP_COMMON_OUT ]; then
+        if [ -d ${common_out_dir} ] && [ ! -L ${common_out_dir} ]; then
+            mv ${common_out_dir} ${common_out_dir}-${target_device}
+            ln -s ${common_out_dir}-${target_device} ${common_out_dir}
+        else
+            [ -L ${common_out_dir} ] && rm ${common_out_dir}
+            mkdir -p ${common_out_dir}-${target_device}
+            ln -s ${common_out_dir}-${target_device} ${common_out_dir}
+        fi
+    else
+        [ -L ${common_out_dir} ] && rm ${common_out_dir}
+        mkdir -p ${common_out_dir}
+    fi
+}
 
 
 # Force JAVA_HOME to point to java 1.6 if it isn't already set
@@ -2046,8 +2098,7 @@ if [ "x$SHELL" != "x/bin/bash" ]; then
 fi
 
 # Execute the contents of any vendorsetup.sh files we can find.
-for f in `test -d device && find device -maxdepth 4 -name 'vendorsetup.sh' 2> /dev/null` \
-         `test -d vendor && find vendor -maxdepth 4 -name 'vendorsetup.sh' 2> /dev/null`
+for f in `/bin/ls vendor/*/vendorsetup.sh vendor/*/*/vendorsetup.sh device/*/*/vendorsetup.sh 2> /dev/null`
 do
     echo "including $f"
     . $f
@@ -2055,3 +2106,5 @@ done
 unset f
 
 addcompletions
+
+export ANDROID_BUILD_TOP=$(gettop)

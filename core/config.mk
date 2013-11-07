@@ -23,6 +23,8 @@ comma := ,
 # only has an effect on python 2.6 and above.
 export PYTHONDONTWRITEBYTECODE := 1
 
+-include $(TOPDIR)vendor/extra/extra_config.mk
+
 # Standard source directories.
 SRC_DOCS:= $(TOPDIR)docs
 # TODO: Enforce some kind of layering; only add include paths
@@ -357,7 +359,7 @@ endif
 
 OLD_FLEX := prebuilts/misc/$(HOST_PREBUILT_TAG)/flex/flex-2.5.4a$(HOST_EXECUTABLE_SUFFIX)
 
-ifeq ($(HOST_OS),darwin)
+ifeq ($(BUILD_OS),darwin)
 # Mac OS' screwy version of java uses a non-standard directory layout
 # and doesn't even seem to have tools.jar.  On the other hand, javac seems
 # to be able to magically find the classes in there, wherever they are, so
@@ -491,5 +493,11 @@ TARGET_PREBUILT_TAG := android-$(TARGET_ARCH)
 RS_PREBUILT_CLCORE := prebuilts/sdk/renderscript/lib/$(TARGET_ARCH)/libclcore.bc
 RS_PREBUILT_LIBPATH := -L prebuilts/ndk/8/platforms/android-9/arch-$(TARGET_ARCH)/usr/lib
 RS_PREBUILT_COMPILER_RT := prebuilts/sdk/renderscript/lib/$(TARGET_ARCH)/libcompiler_rt.a
+
+ifneq ($(COS_BUILD),)
+## We need to be sure the global selinux policies are included
+## last, to avoid accidental resetting by device configs
+$(eval include vendor/cos/sepolicy/sepolicy.mk)
+endif
 
 include $(BUILD_SYSTEM)/dumpvar.mk
